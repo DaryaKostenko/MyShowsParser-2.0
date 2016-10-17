@@ -1,1 +1,1 @@
-# MyShowsParser-2.0
+Парсер сайта MyShows
