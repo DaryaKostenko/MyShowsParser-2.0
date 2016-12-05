@@ -1,87 +1,61 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using HtmlAgilityPack;
 using LiteDB;
 
 
 namespace MyShowsParser
 {
-    public class ShowInfo
-    {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public string OriginalName { get; set; }
-        public string Country { get; set; }
-        public string Genres { get; set; }
-        public string Channel { get; set; }
-        public string Whatchers { get; set; }
-        public string AllDuration { get; set; }
-        public string DurationOneSeries { get; set; }
-        public string MyShowsRating { get; set; }
-    }
-
     class Program
     {
         public const string NameDb = "ShowsDB.db";
         public const string NameCollection = "showsID";
-
-
 
         //поиск информации по ключу
         public static void GetShowInfo(string id)
         {
             ShowInfo show = new ShowInfo();
             string htmlShowId = "https://myshows.me/view/" + id + "/";
-            HtmlDocument htmlDoc = null;
             HtmlWeb web = new HtmlWeb();
-            htmlDoc = web.Load(htmlShowId);
+            HtmlDocument htmlDoc = web.Load(htmlShowId);
 
             try
             {
                 show.Id = id; 
                 //Название сериала
-                show.Name += "Сериал: " + htmlDoc.DocumentNode.SelectSingleNode("//main/h1[@itemprop='name']").InnerText.Trim(); ;
+                show.Name += htmlDoc.DocumentNode.SelectSingleNode("//main/h1[@itemprop='name']").InnerText.Trim(); ;
                 //Оригинальное название
-                show.OriginalName += "Оригинальное название: " + htmlDoc.DocumentNode.SelectSingleNode("//main/p[@class='subHeader']").InnerText.Trim();
+                show.OriginalName +=  htmlDoc.DocumentNode.SelectSingleNode("//main/p[@class='subHeader']").InnerText.Trim();
 
                 //информация из таблицы
                 var info = htmlDoc.DocumentNode.SelectNodes(".//div[@class = 'clear']/p");
                 foreach (var str in info)
                 {
                     if (str.InnerText.Contains("Страна"))
-                    {
-                        show.Country = str.InnerText.Trim();
-                        continue;
-                    }
-                    if (str.InnerText.Contains("Жанры"))
-                    {
-                        show.Genres = str.InnerText.Replace(" ", string.Empty).Replace("\n", " ");
-                        continue;
-                    }
-                    if (str.InnerText.Contains("Канал"))
-                    {
-                        show.Channel = str.InnerText.Trim();
-                        continue;
-                    }
-                    if (str.InnerText.Contains("Смотрящих"))
-                    {
-                        show.Whatchers = str.InnerText.Replace("&thinsp;", string.Empty);
-                        continue;
-                    }
-                    if (str.InnerText.Contains("Общая длительность"))
-                    {
-                        show.AllDuration = str.InnerText.Trim();
-                        continue;
-                    }
+                        show.Country = str.InnerText.Trim().Substring(8);
 
-                    if (str.InnerText.Contains("Длительность серии"))
-                    {
-                        show.DurationOneSeries = str.InnerText.Trim();
-                        continue;
-                    }
-                    if (str.InnerText.Contains("Рейтинг MyShows"))
-                        show.MyShowsRating = str.InnerText.Trim().Replace("\n", " ").Replace("&thinsp;", string.Empty);
+                    else if (str.InnerText.Contains("Жанры"))
+                        show.Genres = str.InnerText.Replace(" ", string.Empty).Replace("\n", " ").Substring(7);
+
+                    else if (str.InnerText.Contains("Канал"))
+                        show.Channel = str.InnerText.Trim().Substring(7);
+
+                    else if (str.InnerText.Contains("Смотрящих"))
+                        show.Whatchers = str.InnerText.Replace("&thinsp;", string.Empty).Substring(11);
+
+                    else if (str.InnerText.Contains("Общая длительность"))
+                        show.AllDuration = str.InnerText.Trim().Substring(20);
+
+                    else if (str.InnerText.Contains("Длительность серии"))
+                        show.DurationOneSeries = str.InnerText.Trim().Substring(20);
+
+                    else if (str.InnerText.Contains("Рейтинг MyShows"))
+                        show.MyShowsRating =
+                            str.InnerText.Trim().Replace("\n", " ").Replace("&thinsp;", string.Empty).Substring(17);
                 }
                 AddShowInDB(show);
+                AddShowInDb_Entity(show);
                 PrintShowInfo(show);
             }
             catch (Exception)
@@ -95,11 +69,9 @@ namespace MyShowsParser
 
         //возвращает ид сериала при поиске по слову 
         public static string GetShowId(string htmlShowId)
-        {
-
-            HtmlDocument htmlDoc = null;
+        {           
             HtmlWeb web = new HtmlWeb();
-            htmlDoc = web.Load(htmlShowId);
+            HtmlDocument htmlDoc = web.Load(htmlShowId);
             try
             {
                 //ссылка на первый найденный сериал
@@ -120,15 +92,15 @@ namespace MyShowsParser
         //вывод информации о сериале
         private static void PrintShowInfo(ShowInfo show)
         {
-            Console.WriteLine(show.Name);
-            Console.WriteLine(show.OriginalName);
-            Console.WriteLine(show.Country);
-            Console.WriteLine(show.Genres);
-            Console.WriteLine(show.Channel);
-            Console.WriteLine(show.Whatchers);
-            Console.WriteLine(show.AllDuration);
-            Console.WriteLine(show.DurationOneSeries);
-            Console.WriteLine(show.MyShowsRating);
+            Console.WriteLine("Сериал: " + show.Name);
+            Console.WriteLine("Оригинальное название: " + show.OriginalName);
+            Console.WriteLine("Страна: " + show.Country);
+            Console.WriteLine("Жанры: " + show.Genres);
+            Console.WriteLine("Канал: " + show.Channel);
+            Console.WriteLine("Смотрящих: " + show.Whatchers);
+            Console.WriteLine("Общая длительность: " + show.AllDuration);
+            Console.WriteLine("Длительность одной серии: " + show.DurationOneSeries);
+            Console.WriteLine("Рейтинг MyShows: " + show.MyShowsRating);
             Console.ReadLine();
         }
 
@@ -158,6 +130,44 @@ namespace MyShowsParser
             }
         }
 
+        //добавить в базу данных
+        public static void AddShowInDb_Entity(ShowInfo show)
+        {
+            using (var db = new Context())
+            {
+                var country = db.Countries.Find(show.Country);
+                if (country == null)
+                {
+                    country = new CountryModel()
+                    {
+                        Name = show.Country
+                    };
+                }
+
+                var new_show = new ShowModel()
+                {
+                    Name = show.Name,
+                    OriginalName = show.OriginalName,
+                    Country = country,
+                    Genres = show.Genres,
+                    MyShowsRating = show.MyShowsRating
+                };
+
+                db.Shows.Add(new_show);
+                db.SaveChanges();
+            }
+        }
+
+        //поиск всех фильмов одного автора
+        public static List<ShowModel> GetShowsByCountry(string country)
+        {
+            using (var db = new Context())
+            {
+                return
+                   db.Shows.Where(x => x.Country.Name.ToLower() == country.ToLower()).ToList();
+            }
+        }
+
         static void Main(string[] args)
         {
             while (true)
@@ -165,6 +175,7 @@ namespace MyShowsParser
                 Console.Clear();
                 Console.WriteLine("1.Поиск по ID сериала");
                 Console.WriteLine("2.Поиск по ключевому слову");
+                Console.WriteLine("3.Поиск фильмов по странам");
                 try
                 {
                     int choice = int.Parse(Console.ReadLine());
@@ -176,6 +187,14 @@ namespace MyShowsParser
                             Console.WriteLine("\nВведите ID сериала");
                             id = Console.ReadLine();
                             Console.WriteLine("\nРезультат поиска по ID сериала " + id + "\n");
+                            ShowInfo searchRes = SearchInDB_ID(id);
+                            if (searchRes == null) //если в кэше нет
+                                GetShowInfo(id);
+                            else
+                            {
+                                Console.WriteLine("(Информация из кэша)" + "\n");
+                                PrintShowInfo(searchRes);
+                            }
                             break;
 
                         case 2:
@@ -186,6 +205,36 @@ namespace MyShowsParser
                             id = GetShowId(htmlShowWord);
                             if (id == String.Empty)
                                 continue;
+                            searchRes = SearchInDB_ID(id);
+                            if (searchRes == null) //если в кэше нет
+                                GetShowInfo(id);
+                            else
+                            {
+                                Console.WriteLine("(Информация из кэша)" + "\n");
+                                PrintShowInfo(searchRes);
+                            }
+                            break;
+                        case 3:
+                            Console.WriteLine("\nВведите название страны");
+                            var country = Console.ReadLine();
+
+                            var list = GetShowsByCountry(country);
+                            if (list.Count == 0)
+                            {
+                                Console.WriteLine("Нет данных о сериалах, снятых в выбранной стране!");
+                                Console.ReadLine();
+                                break;
+                            }
+                            Console.WriteLine("\nСериалы, снятые в " + country + ":\n");
+                            foreach (var show in list)
+                            {
+                                Console.WriteLine("Название: "+show.Name);
+                                Console.WriteLine("Оригинальное название: " + show.OriginalName);
+                                Console.WriteLine("Жанры: " + show.Genres);
+                                Console.WriteLine("Рейтинг MyShows: " + show.MyShowsRating);
+                                Console.WriteLine("\n");
+                            }
+                            Console.ReadLine();
                             break;
                         default:
                             Console.WriteLine("\nОшибка выбора действия!");
@@ -194,14 +243,7 @@ namespace MyShowsParser
                             continue;
                     }
 
-                    ShowInfo searchRes = SearchInDB_ID(id);
-                    if (searchRes == null) //если в кэше нет
-                        GetShowInfo(id);
-                    else
-                    {
-                        Console.WriteLine("(Информация из кэша)" + "\n");
-                        PrintShowInfo(searchRes);
-                    }
+
                 }
                 catch (Exception)
                 {
